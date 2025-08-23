@@ -1,0 +1,17 @@
+{
+  "name": "yjs-ws-service",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "dev": "node server.js",
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.3",
+    "y-websocket": "^2.1.0",
+    "yjs": "^13.6.27"
+  }
+}
+
+
