@@ -1,4 +1,4 @@
-app = ""
+app = "negation-game-yjs-ws"
 primary_region = "iad"
 
 [build]
