@@ -1,6 +1,22 @@
 const WebSocket = require('ws');
 const http = require('http');
-const { setupWSConnection } = require('y-websocket/bin/utils');
+const path = require('path');
+const fs = require('fs');
+
+let utilsPath;
+try {
+  const packageRoot = require.resolve('y-websocket/package.json');
+  utilsPath = path.join(path.dirname(packageRoot), 'bin', 'utils.cjs');
+  
+  if (!fs.existsSync(utilsPath)) {
+    throw new Error('utils.cjs not found at expected location');
+  }
+} catch (e) {
+  console.error('Failed to locate y-websocket utils:', e.message);
+  process.exit(1);
+}
+
+const { setupWSConnection } = require(utilsPath);
 
 const port = Number(process.env.PORT || process.env.WS_PORT || 8080);
 const isDev = process.env.NODE_ENV !== 'production';
