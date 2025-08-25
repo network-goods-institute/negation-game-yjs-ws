@@ -1,6 +1,6 @@
 const WebSocket = require('ws');
 const http = require('http');
-const Y = require('yjs');
+const { setupWSConnection } = require('y-websocket/bin/utils');
 
 const port = Number(process.env.PORT || process.env.WS_PORT || 8080);
 const isDev = process.env.NODE_ENV !== 'production';
@@ -17,23 +17,18 @@ if (isDev) {
 
 function isOriginAllowed(origin) {
   if (!origin) return false;
-  
-  return allowedOrigins.some(allowed => {
-    if (typeof allowed === 'string') {
-      return origin === allowed;
-    }
-    return allowed.test(origin);
-  });
+  return allowedOrigins.some(allowed =>
+    typeof allowed === 'string' ? origin === allowed : allowed.test(origin)
+  );
 }
 
 const server = http.createServer((req, res) => {
   if (req.method === 'GET' && req.url === '/') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ 
-      status: 'ok', 
-      message: 'YJS WebSocket server is running',
+    res.end(JSON.stringify({
+      status: 'ok',
+      message: 'y-websocket server running',
       timestamp: new Date().toISOString(),
-      rooms: docs.size
     }));
   } else if (req.method === 'GET' && req.url === '/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -43,64 +38,30 @@ const server = http.createServer((req, res) => {
     res.end('Not found');
   }
 });
-const wss = new WebSocket.Server({ 
+
+const wss = new WebSocket.Server({
   server,
-  verifyClient: (info) => {
-    const origin = info.origin || info.req.headers.origin;
-    return isOriginAllowed(origin);
-  }
+  verifyClient: info => isOriginAllowed(info.origin || info.req.headers.origin)
 });
 
-const docs = new Map();
+wss.on('connection', (conn, req) => {
+  try {
+    const url = new URL(req.url, `http://${req.headers.host}`);
+    // y-websocket expects room in the path ("/roomname"). Our client uses
+    // WebsocketProvider(baseUrl, roomName), which constructs that URL.
+    const roomFromPath = (url.pathname || '/').slice(1) || 'default';
+    const roomFromQuery = url.searchParams.get('room') || undefined;
+    const docName = roomFromQuery || roomFromPath;
 
-wss.on('connection', (ws, req) => {
-  const url = new URL(req.url, `http://${req.headers.host}`);
-  const roomname = url.searchParams.get('room') || 'default';
-  ws._roomname = roomname;
-  
-  if (!docs.has(roomname)) {
-    docs.set(roomname, new Y.Doc());
-  }
-  
-  const doc = docs.get(roomname);
-  
-  ws.on('message', (message) => {
-    try {
-      const data = new Uint8Array(message);
-      Y.applyUpdate(doc, data);
-      
-      // Broadcast to all other clients in the same room
-      wss.clients.forEach((client) => {
-        if (client !== ws && client.readyState === WebSocket.OPEN && client._roomname === roomname) {
-          client.send(message);
-        }
-      });
-    } catch (err) {
-      console.error('Error processing message:', err);
-    }
-  });
-  
-  ws.on('close', () => {
-    // Clean up if no more clients for this room
-    const roomClients = Array.from(wss.clients).filter(client => {
-      return client.readyState === WebSocket.OPEN && client._roomname === roomname;
-    });
-    
-    if (roomClients.length === 0) {
-      docs.delete(roomname);
-    }
-  });
-  
-  // Send current document state to new client
-  const stateVector = Y.encodeStateVector(doc);
-  const update = Y.encodeStateAsUpdate(doc, stateVector);
-  if (update.length > 0) {
-    ws.send(update);
+    setupWSConnection(conn, req, { docName });
+  } catch (err) {
+    console.error('WS connection error:', err);
+    try { conn.close(); } catch {}
   }
 });
 
 server.listen(port, '0.0.0.0', () => {
-  console.log(`YJS WebSocket server listening on 0.0.0.0:${port}`);
+  console.log(`y-websocket listening on 0.0.0.0:${port}`);
 });
 
 wss.on('error', (err) => {
@@ -110,5 +71,4 @@ wss.on('error', (err) => {
 process.on('SIGINT', () => {
   server.close(() => process.exit(0));
 });
-
 
