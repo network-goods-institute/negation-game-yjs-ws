@@ -57,6 +57,13 @@ const server = http.createServer((req, res) => {
 
 const wss = new WebSocket.Server({
   server,
+  // Enable compression to reduce egress on Yjs frames
+  perMessageDeflate: {
+    clientNoContextTakeover: true,
+    serverNoContextTakeover: true,
+    serverMaxWindowBits: 15,
+    threshold: 1024, // only compress larger frames
+  },
   verifyClient: info => isOriginAllowed(info.origin || info.req.headers.origin)
 });
 
