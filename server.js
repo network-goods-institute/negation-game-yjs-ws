@@ -2,6 +2,7 @@ const WebSocket = require('ws');
 const http = require('http');
 // This isn't imported or something
 let setupWSConnection;
+const roomCounts = new Map();
 try {
   const packageRoot = require.resolve('y-websocket/package.json');
   utilsPath = path.join(path.dirname(packageRoot), 'bin', 'utils.cjs');
@@ -150,16 +151,35 @@ wss.on('connection', (conn, req) => {
     const docName = roomFromQuery || roomFromPath;
 
     console.log(`[ws] Client connected: IP=${clientIp}, origin=${origin}, room=${docName}`);
+    try {
+      const c = (roomCounts.get(docName) || 0) + 1;
+      roomCounts.set(docName, c);
+      console.log(`[ws] Room size`, { room: docName, count: c });
+    } catch {}
 
     setupWSConnection(conn, req, { docName });
 
     conn.on('close', (code, reason) => {
       console.log(`[ws] Client disconnected: IP=${clientIp}, room=${docName}, code=${code}, reason=${reason || 'none'}`);
+      try {
+        const c = Math.max(0, (roomCounts.get(docName) || 1) - 1);
+        roomCounts.set(docName, c);
+        console.log(`[ws] Room size`, { room: docName, count: c });
+      } catch {}
     });
 
     conn.on('error', (error) => {
       console.error(`[ws] Client error: IP=${clientIp}, room=${docName}, error=${error.message}`);
     });
+
+    try {
+      conn.on('pong', () => {
+        try { conn.__lastPong = Date.now(); } catch {}
+      });
+      setInterval(() => {
+        try { conn.ping(); } catch {}
+      }, 30000);
+    } catch {}
 
   } catch (err) {
     console.error(`[ws] Connection setup error for IP=${clientIp}:`, err.message);
@@ -197,4 +217,3 @@ process.on('uncaughtException', (err) => {
 process.on('unhandledRejection', (reason, promise) => {
   console.error('[server] Unhandled rejection at:', promise, 'reason:', reason);
 });
-
